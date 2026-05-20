@@ -165,8 +165,8 @@ def get_video_stats(video_ids):
                     "description": snippet.get("description", "")[:300],
                     "thumbnail": snippet.get("thumbnails", {}).get("medium", {}).get("url", ""),
                 })
-            except Exception as e:
-                print(f"get_video_stats error: {e}")
+        except Exception as e:
+            print(f"get_video_stats error: {e}")
     return videos
 
 def fetch_company_data(company_name):
@@ -575,7 +575,6 @@ def build_pptx(analyzed, your_company):
     circle.fill.fore_color.rgb = ACCENT1
     circle.line.fill.background()
     
-    # Secure low-level layout transparency execution block
     try:
         spPr = circle._element.spPr
         from pptx.oxml.ns import qn
@@ -690,7 +689,6 @@ def build_pptx(analyzed, your_company):
         x = 0.35 + i * card_w
         add_rect(slide, x, y_start, card_w - 0.12, 4.1, RGBColor(0xFF, 0xFF, 0xFF))
         
-        # Fixed explicit configuration mapping lookup
         hex_color = CHART_COLORS_MPL[i % 5]
         header_color = RGBColor(
             int(hex_color[1:3], 16),
@@ -861,7 +859,6 @@ def build_pptx(analyzed, your_company):
         bar_full.fill.fore_color.rgb = RGBColor(0x30, 0x45, 0x60)
         bar_full.line.fill.background()
         
-        # Padded metric constraints preventing OpenXML layout calculation collapse
         fill_width = max(0.02, a["score"] / 100)
         bar_filled = slide.shapes.add_shape(1, Inches(8.5), Inches(table_y + 0.2), Inches(fill_width), Inches(0.22))
         bar_filled.fill.solid()
