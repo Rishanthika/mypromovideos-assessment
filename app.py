@@ -16,6 +16,7 @@ from pptx.enum.chart import XL_CHART_TYPE
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib.figure import Figure
+from matplotlib.backends.backend_agg import FigureCanvasAgg
 import numpy as np
 
 app = Flask(__name__)
@@ -235,7 +236,7 @@ def generate_mock_data(company_name):
 # ─── ANALYSIS ────────────────────────────────────────────────────────────────
 def analyze_data(companies_data):
     results = []
-    for data in companies_data:
+    for idx, data in enumerate(companies_data):
         videos = data["videos"]
         
         total_views = sum(v["views"] for v in videos)
@@ -291,6 +292,7 @@ def analyze_data(companies_data):
         
         results.append({
             **data,
+            "color_index": idx,
             "avg_views": avg_views,
             "avg_likes": avg_likes,
             "avg_comments": avg_comments,
@@ -317,11 +319,11 @@ def compute_scores(analyzed):
     max_eng   = safe_max(eng)
     max_freq  = safe_max(freq)
     
-    for i, a in enumerate(analyzed):
-        sub_score  = (subs[i] / max_subs) * 25
-        view_score = (views[i] / max_views) * 30
-        eng_score  = (eng[i] / max_eng) * 25
-        freq_score = (freq[i] / max_freq) * 20
+    for a in analyzed:
+        sub_score  = (a["channel"].get("subscribers", 0) / max_subs) * 25
+        view_score = (a["avg_views"] / max_views) * 30
+        eng_score  = (a["engagement_rate"] / max_eng) * 25
+        freq_score = (a["uploads_per_month"] / max_freq) * 20
         a["score"] = round(sub_score + view_score + eng_score + freq_score)
         a["sub_score"]  = round(sub_score / 25 * 100)
         a["view_score"] = round(view_score / 30 * 100)
@@ -333,13 +335,13 @@ def compute_scores(analyzed):
 # ─── THREAD-SAFE CHART GENERATORS ────────────────────────────────────────────
 def fig_to_png_bytes(fig):
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=150, bbox_inches='tight',
-                facecolor=fig.get_facecolor())
+    fig.savefig(buf, format='png', dpi=150, bbox_inches='tight', facecolor=fig.get_facecolor())
     buf.seek(0)
     return buf
 
 def make_bar_chart(labels, values, title, ylabel, colors=None, figsize=(8, 4)):
     fig = Figure(figsize=figsize, facecolor='#F4F7FB')
+    canvas = FigureCanvasAgg(fig)
     ax = fig.add_subplot(111)
     ax.set_facecolor('#F4F7FB')
     if colors is None:
@@ -368,6 +370,7 @@ def make_grouped_bar(companies, metric_labels, values_matrix, title, figsize=(9,
     width = 0.7 / max(n, 1)
     
     fig = Figure(figsize=figsize, facecolor='#F4F7FB')
+    canvas = FigureCanvasAgg(fig)
     ax = fig.add_subplot(111)
     ax.set_facecolor('#F4F7FB')
     
@@ -393,12 +396,12 @@ def make_grouped_bar(companies, metric_labels, values_matrix, title, figsize=(9,
 
 def make_line_chart(companies, month_data_list, figsize=(9, 4)):
     fig = Figure(figsize=figsize, facecolor='#F4F7FB')
+    canvas = FigureCanvasAgg(fig)
     ax = fig.add_subplot(111)
     ax.set_facecolor('#F4F7FB')
     
     all_months = sorted(set(m for md in month_data_list for m in md.keys()))
     all_months = all_months[-12:]
-    
     if not all_months:
         all_months = [datetime.date.today().strftime("%Y-%m")]
 
@@ -430,6 +433,7 @@ def make_radar_chart(companies, categories, values_matrix, figsize=(6, 5)):
     angles += angles[:1]
     
     fig = Figure(figsize=figsize, facecolor='#F4F7FB')
+    canvas = FigureCanvasAgg(fig)
     ax = fig.add_subplot(111, polar=True)
     ax.set_facecolor('#F4F7FB')
     ax.spines['polar'].set_color('#E2E8F0')
@@ -552,7 +556,6 @@ def build_pptx(analyzed, your_company):
     prs.slide_height = Inches(5.625)
     
     companies  = [a["company"] for a in analyzed]
-    colors_mpl = CHART_COLORS_MPL[:len(companies)]
     today      = datetime.date.today().strftime("%B %d, %Y")
     ranked     = sorted(analyzed, key=lambda a: a["score"], reverse=True)
     leader     = ranked[0]
@@ -564,6 +567,19 @@ def build_pptx(analyzed, your_company):
     circle.fill.solid()
     circle.fill.fore_color.rgb = ACCENT1
     circle.line.fill.background()
+    
+    try:
+        spPr = circle._element.spPr
+        from pptx.oxml.ns import qn
+        solidFill = spPr.find(qn('a:solidFill'))
+        if solidFill is not None:
+            srgb = solidFill.find(qn('a:srgbClr'))
+            if srgb is not None:
+                from lxml import etree
+                alpha_elem = etree.SubElement(srgb, qn('a:alpha'))
+                alpha_elem.set('val', '15000')
+    except:
+        pass
         
     add_text_box(slide, "VIDEO COMPETITOR", 0.6, 1.2, 7, 0.65,
                  size=38, bold=True, color=TEXT_LIGHT)
@@ -642,10 +658,10 @@ def build_pptx(analyzed, your_company):
     subs_vals  = [a["channel"].get("subscribers", 0) for a in analyzed]
     videos_cnt = [a["channel"].get("total_videos", 0) for a in analyzed]
     
-    fig1 = make_bar_chart(labels, subs_vals, "Subscribers", "Count", colors_mpl, figsize=(4.5, 3.2))
+    fig1 = make_bar_chart(labels, subs_vals, "Subscribers", "Count", None, figsize=(4.5, 3.2))
     add_chart_image(slide, fig1, 0.3, 1.2, 4.5, 3.2)
     
-    fig2 = make_bar_chart(labels, videos_cnt, "Total Videos Published", "Count", colors_mpl, figsize=(4.5, 3.2))
+    fig2 = make_bar_chart(labels, videos_cnt, "Total Videos Published", "Count", None, figsize=(4.5, 3.2))
     add_chart_image(slide, fig2, 5.2, 1.2, 4.5, 3.2)
     
     add_rect(slide, 0.3, 4.6, 9.4, 0.65, RGBColor(0xE8, 0xF4, 0xF1))
@@ -663,11 +679,10 @@ def build_pptx(analyzed, your_company):
     y_start = 1.15
     
     for i, a in enumerate(analyzed):
-        orig_index = analyzed.index(a)
         x = 0.35 + i * card_w
         add_rect(slide, x, y_start, card_w - 0.12, 4.1, RGBColor(0xFF, 0xFF, 0xFF))
         
-        hex_color = CHART_COLORS_MPL[orig_index % 5]
+        hex_color = CHART_COLORS_MPL[a["color_index"] % 5]
         header_color = RGBColor(
             int(hex_color[1:3], 16),
             int(hex_color[3:5], 16),
@@ -703,7 +718,7 @@ def build_pptx(analyzed, your_company):
     )
     add_chart_image(slide, fig_eng, 0.3, 1.1, 5.8, 3.4)
     
-    fig_er = make_bar_chart(labels, eng_r, "Engagement Rate (%)", "%", colors_mpl, figsize=(3.5, 3.4))
+    fig_er = make_bar_chart(labels, eng_r, "Engagement Rate (%)", "%", None, figsize=(3.5, 3.4))
     add_chart_image(slide, fig_er, 6.2, 1.1, 3.5, 3.4)
     
     best_eng = max(analyzed, key=lambda a: a["engagement_rate"])
@@ -720,12 +735,11 @@ def build_pptx(analyzed, your_company):
     
     row_y = 1.55
     for i, a in enumerate(analyzed):
-        orig_index = analyzed.index(a)
         col_x = 0.35 + (i % 2) * 4.7
         row_y_pos = row_y + (i // 2) * 1.8
         
         add_rect(slide, col_x, row_y_pos, 4.4, 1.65, RGBColor(0xFF, 0xFF, 0xFF))
-        hex_color = CHART_COLORS_MPL[orig_index % 5]
+        hex_color = CHART_COLORS_MPL[a["color_index"] % 5]
         header_color = RGBColor(int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16))
         add_rect(slide, col_x, row_y_pos, 4.4, 0.28, header_color)
         add_text_box(slide, a["company"], col_x + 0.1, row_y_pos + 0.04, 4.2, 0.22,
@@ -828,7 +842,6 @@ def build_pptx(analyzed, your_company):
     table_y = 1.55
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
     for rank, a in enumerate(ranked):
-        orig_index = analyzed.index(a)
         add_rect(slide, 5.9, table_y, 3.8, 0.62, MID_BG)
         add_text_box(slide, medals[rank], 6.0, table_y + 0.1, 0.4, 0.45, size=14)
         add_text_box(slide, a["company"], 6.45, table_y + 0.07, 2.2, 0.25, size=10, bold=True, color=TEXT_LIGHT)
@@ -843,7 +856,7 @@ def build_pptx(analyzed, your_company):
         bar_filled = slide.shapes.add_shape(1, Inches(8.5), Inches(table_y + 0.2), Inches(fill_width), Inches(0.22))
         bar_filled.fill.solid()
         
-        hex_color = CHART_COLORS_MPL[orig_index % 5]
+        hex_color = CHART_COLORS_MPL[a["color_index"] % 5]
         bar_filled.fill.fore_color.rgb = RGBColor(
             int(hex_color[1:3], 16),
             int(hex_color[3:5], 16),
@@ -979,11 +992,9 @@ def download():
         
         pptx_buf = build_pptx(analyzed, your_company)
         
-        # Safe filename generation to prevent OS write errors
         safe_company = re.sub(r'[^A-Za-z0-9_]', '', your_company.replace(' ', '_'))
         filename = f"video_intel_{safe_company}_{datetime.date.today()}.pptx"
         
-        # Robust send_file block that handles multiple versions of Flask
         try:
             return send_file(
                 pptx_buf,
@@ -992,7 +1003,6 @@ def download():
                 download_name=filename
             )
         except TypeError:
-            # Fallback if Render uses an older Flask build
             pptx_buf.seek(0)
             return send_file(
                 pptx_buf,
