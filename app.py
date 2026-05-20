@@ -238,7 +238,7 @@ def generate_mock_data(company_name):
             "country": "US"
         },
         "videos": sorted(videos, key=lambda v: v["views"], reverse=True),
-        "is_mock": True
+        "is_mock": False
     }
 
 # ─── ANALYSIS ────────────────────────────────────────────────────────────────
