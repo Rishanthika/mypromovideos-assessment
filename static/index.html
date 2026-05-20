@@ -292,26 +292,6 @@
       padding-left: 2rem;
     }
 
-    .api-key-section {
-      background: rgba(255,107,53,0.05);
-      border: 1px solid rgba(255,107,53,0.2);
-      border-radius: 0;
-      padding: 1rem 1.2rem;
-      margin-bottom: 1.4rem;
-    }
-
-    .api-notice {
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 0.68rem;
-      color: rgba(255,255,255,0.4);
-      margin-top: 0.4rem;
-      line-height: 1.7;
-      letter-spacing: 0.02em;
-    }
-
-    .api-notice a { color: var(--coral); text-decoration: none; }
-    .api-notice a:hover { text-decoration: underline; }
-
     .btn-analyze {
       width: 100%;
       background: transparent;
@@ -328,6 +308,7 @@
       text-transform: uppercase;
       position: relative;
       overflow: hidden;
+      margin-top: 1rem;
     }
 
     .btn-analyze::before {
@@ -808,7 +789,6 @@
 </head>
 <body>
 
-<!-- LOADING OVERLAY -->
 <div class="loading-overlay" id="loadingOverlay">
   <div class="spinner"></div>
   <div class="loading-text">Analysing channels...</div>
@@ -828,7 +808,6 @@
   </div>
 </div>
 
-<!-- HERO / INPUT SECTION -->
 <section class="hero" id="heroSection">
   <div class="hero-bg"></div>
   <div class="grid-lines"></div>
@@ -887,19 +866,6 @@
         </div>
       </div>
 
-      <div class="api-key-section">
-        <label class="form-label" for="apiKey" style="color:var(--coral)">
-          ⬡ YouTube Data API Key
-        </label>
-        <input class="form-input" type="password" id="apiKey"
-               placeholder="AIza... (optional — uses demo data without key)" />
-        <p class="api-notice">
-          Get a free key at
-          <a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a>
-          → Enable YouTube Data API v3. Without a key, the tool uses realistic demo data.
-        </p>
-      </div>
-
       <div class="error-box" id="errorBox"></div>
 
       <button class="btn-analyze" id="analyzeBtn" onclick="runAnalysis()">
@@ -913,7 +879,6 @@
   </div>
 </section>
 
-<!-- REPORT SECTION -->
 <section class="report-section" id="reportSection">
   <div class="report-header">
     <div>
@@ -929,13 +894,11 @@
   </div>
 
   <div class="data-note" id="dataMockNote">
-    ⚠ <strong>Demo mode:</strong> No API key provided — report uses realistic simulated data
-    to demonstrate the analysis. Add a YouTube Data API key for real channel data.
+    ⚠ <strong>Demo mode:</strong> API Key configuration missing — report uses realistic simulated data.
   </div>
 
   <div class="report-grid" id="reportGrid">
-    <!-- Filled dynamically -->
-  </div>
+    </div>
 </section>
 
 <script>
@@ -985,9 +948,7 @@
       .map(i => document.getElementById(`comp${i}`).value.trim())
       .filter(Boolean);
 
-    const apiKey = document.getElementById('apiKey').value.trim();
-
-    lastFormData = { your_company: yourCompany, competitors, apiKey };
+    lastFormData = { your_company: yourCompany, competitors };
 
     hideError();
     document.getElementById('analyzeBtn').disabled = true;
@@ -1001,8 +962,7 @@
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          ...(apiKey ? { 'X-YouTube-Key': apiKey } : {})
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ your_company: yourCompany, competitors })
       });
@@ -1226,7 +1186,7 @@
 
   function buildFrequencyCard(companies) {
     const maxFreq = Math.max(...companies.map(c => c.uploads_per_month));
-    const most    = companies.reduce((a,b) => a.uploads_per_month > b.uploads_per_month ? a : b);
+    const most   = companies.reduce((a,b) => a.uploads_per_month > b.uploads_per_month ? a : b);
 
     const bars = companies.map((c,i) => {
       const pct = maxFreq > 0 ? (c.uploads_per_month / maxFreq * 100) : 0;
@@ -1335,12 +1295,10 @@
     btn.disabled = true;
 
     try {
-      const apiKey = lastFormData.apiKey || '';
       const res = await fetch('/api/download', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          ...(apiKey ? { 'X-YouTube-Key': apiKey } : {})
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           your_company: lastFormData.your_company,
