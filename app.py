@@ -14,7 +14,6 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 from pptx.chart.data import ChartData
 from pptx.enum.chart import XL_CHART_TYPE
-from pptx.util import Inches, Pt
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -69,7 +68,6 @@ def search_channel(company_name):
         items = data.get("items", [])
         if not items:
             return None
-        # Pick best match
         for item in items:
             title = item["snippet"]["channelTitle"].lower()
             if company_name.lower() in title or title in company_name.lower():
@@ -140,7 +138,6 @@ def get_video_stats(video_ids):
     if not YOUTUBE_API_KEY or not video_ids:
         return []
     videos = []
-    # Batch in groups of 50
     for i in range(0, len(video_ids), 50):
         batch = video_ids[i:i+50]
         try:
@@ -168,8 +165,8 @@ def get_video_stats(video_ids):
                     "description": snippet.get("description", "")[:300],
                     "thumbnail": snippet.get("thumbnails", {}).get("medium", {}).get("url", ""),
                 })
-        except Exception as e:
-            print(f"get_video_stats error: {e}")
+            except Exception as e:
+                print(f"get_video_stats error: {e}")
     return videos
 
 def fetch_company_data(company_name):
@@ -193,7 +190,7 @@ def fetch_company_data(company_name):
     }
 
 def generate_mock_data(company_name):
-    """Generate realistic mock data when API is unavailable."""
+    """Generate realistic mathematically proportional mock data when API is unavailable."""
     import random
     rng = random.Random(hash(company_name) % 10000)
     
@@ -211,13 +208,18 @@ def generate_mock_data(company_name):
         pub = (datetime.datetime.now() - datetime.timedelta(days=days_ago)).isoformat() + "Z"
         views = int(rng.gauss(base_views / num_videos, base_views / (num_videos * 3)))
         views = max(100, views)
+        
+        # Tie engagement metrics proportionally to views
+        likes = int(views * rng.uniform(0.02, 0.04))
+        comments = int(likes * rng.uniform(0.05, 0.10))
+        
         videos.append({
             "id": f"mock_{company_name}_{i}",
             "title": f"{company_name}: {topic.title()} #{i+1}",
             "published_at": pub,
             "views": views,
-            "likes": int(views * rng.uniform(0.01, 0.05)),
-            "comments": int(views * rng.uniform(0.001, 0.01)),
+            "likes": likes,
+            "comments": comments,
             "duration": f"PT{rng.randint(3,25)}M{rng.randint(0,59)}S",
             "tags": rng.sample(topics, rng.randint(2, 5)),
             "description": f"Learn about {topic} from {company_name}.",
@@ -247,7 +249,6 @@ def analyze_data(companies_data):
     results = []
     for data in companies_data:
         videos = data["videos"]
-        channel = data["channel"]
         
         total_views = sum(v["views"] for v in videos)
         total_likes = sum(v["likes"] for v in videos)
@@ -258,10 +259,8 @@ def analyze_data(companies_data):
         avg_likes = total_likes // n
         avg_comments = total_comments // n
         
-        # Engagement rate
         engagement_rate = (total_likes + total_comments) / max(total_views, 1) * 100
         
-        # Upload frequency (videos per month from recent 50)
         if videos:
             dates = []
             for v in videos:
@@ -279,10 +278,8 @@ def analyze_data(companies_data):
         else:
             uploads_per_month = 0
         
-        # Top videos
         top_videos = sorted(videos, key=lambda v: v["views"], reverse=True)[:5]
         
-        # Tags / themes
         all_tags = []
         for v in videos:
             all_tags.extend(v.get("tags", []))
@@ -295,7 +292,6 @@ def analyze_data(companies_data):
         tag_counts = Counter(t.lower() for t in all_tags if t.lower() not in STOPWORDS)
         top_themes = [t for t, _ in tag_counts.most_common(8)]
         
-        # Monthly upload pattern
         month_counts = {}
         for v in videos:
             try:
@@ -378,87 +374,7 @@ def make_bar_chart(labels, values, title, ylabel, colors=None, figsize=(8, 4)):
     plt.tight_layout()
     return fig
 
-def make_horizontal_bar_chart(labels, values, title, colors=None, figsize=(8, 3.5)):
-    fig, ax = plt.subplots(figsize=figsize, facecolor='#F4F7FB')
-    ax.set_facecolor('#F4F7FB')
-    if colors is None:
-        colors = CHART_COLORS_MPL[:len(labels)]
-    y_pos = range(len(labels))
-    bars = ax.barh(list(y_pos), values, color=colors, edgecolor='white', linewidth=0.5, height=0.5)
-    ax.set_yticks(list(y_pos))
-    ax.set_yticklabels(labels, fontsize=9, color='#0D1B2A')
-    ax.set_title(title, fontsize=13, fontweight='bold', color='#0D1B2A', pad=10)
-    ax.tick_params(axis='x', labelsize=8, colors='#647487')
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_color('#E2E8F0')
-    ax.spines['bottom'].set_color('#E2E8F0')
-    ax.xaxis.grid(True, color='#E2E8F0', linewidth=0.5, alpha=0.8)
-    ax.set_axisbelow(True)
-    for bar, val in zip(bars, values):
-        ax.text(bar.get_width() * 1.01, bar.get_y() + bar.get_height()/2,
-                format_number(val), va='center', fontsize=7.5,
-                color='#0D1B2A', fontweight='bold')
-    plt.tight_layout()
-    return fig
-
-def make_radar_chart(companies, categories, values_matrix, figsize=(6, 5)):
-    N = len(categories)
-    angles = [n / float(N) * 2 * math.pi for n in range(N)]
-    angles += angles[:1]
-    
-    fig, ax = plt.subplots(figsize=figsize, subplot_kw=dict(polar=True), facecolor='#F4F7FB')
-    ax.set_facecolor('#F4F7FB')
-    ax.spines['polar'].set_color('#E2E8F0')
-    
-    for i, (company, values) in enumerate(zip(companies, values_matrix)):
-        vals = list(values) + [values[0]]
-        color = CHART_COLORS_MPL[i % len(CHART_COLORS_MPL)]
-        ax.plot(angles, vals, 'o-', linewidth=2, color=color, label=company)
-        ax.fill(angles, vals, alpha=0.12, color=color)
-    
-    ax.set_xticks(angles[:-1])
-    ax.set_xticklabels(categories, fontsize=8, color='#0D1B2A')
-    ax.set_yticklabels([])
-    ax.yaxis.grid(True, color='#E2E8F0')
-    ax.xaxis.grid(True, color='#E2E8F0')
-    ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1), fontsize=8)
-    plt.tight_layout()
-    return fig
-
-def make_line_chart(companies, month_data_list, figsize=(9, 4)):
-    """Upload frequency over time."""
-    fig, ax = plt.subplots(figsize=figsize, facecolor='#F4F7FB')
-    ax.set_facecolor('#F4F7FB')
-    
-    # Get union of months, sorted
-    all_months = sorted(set(m for md in month_data_list for m in md.keys()))
-    all_months = all_months[-12:]  # last 12 months
-    
-    for i, (company, month_data) in enumerate(zip(companies, month_data_list)):
-        values = [month_data.get(m, 0) for m in all_months]
-        color = CHART_COLORS_MPL[i % len(CHART_COLORS_MPL)]
-        ax.plot(range(len(all_months)), values, 'o-', linewidth=2, color=color,
-                label=company, markersize=5)
-    
-    ax.set_xticks(range(len(all_months)))
-    ax.set_xticklabels([m[-5:] for m in all_months], rotation=45, fontsize=7, color='#647487')
-    ax.set_ylabel("Videos uploaded", fontsize=9, color='#647487')
-    ax.set_title("Monthly Upload Frequency (last 12 months)", fontsize=12, fontweight='bold',
-                 color='#0D1B2A', pad=10)
-    ax.tick_params(axis='y', labelsize=8, colors='#647487')
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_color('#E2E8F0')
-    ax.spines['bottom'].set_color('#E2E8F0')
-    ax.yaxis.grid(True, color='#E2E8F0', linewidth=0.5, alpha=0.8)
-    ax.set_axisbelow(True)
-    ax.legend(fontsize=8, loc='upper right')
-    plt.tight_layout()
-    return fig
-
 def make_grouped_bar(companies, metric_labels, values_matrix, title, figsize=(9, 4)):
-    """Grouped bar chart. values_matrix[i] = values for company i across all metrics."""
     x = np.arange(len(metric_labels))
     n = len(companies)
     width = 0.7 / max(n, 1)
@@ -486,6 +402,62 @@ def make_grouped_bar(companies, metric_labels, values_matrix, title, figsize=(9,
     plt.tight_layout()
     return fig
 
+def make_line_chart(companies, month_data_list, figsize=(9, 4)):
+    fig, ax = plt.subplots(figsize=figsize, facecolor='#F4F7FB')
+    ax.set_facecolor('#F4F7FB')
+    
+    all_months = sorted(set(m for md in month_data_list for m in md.keys()))
+    all_months = all_months[-12:]
+    
+    if not all_months:
+        all_months = [datetime.date.today().strftime("%Y-%m")]
+
+    for i, (company, month_data) in enumerate(zip(companies, month_data_list)):
+        values = [month_data.get(m, 0) for m in all_months]
+        color = CHART_COLORS_MPL[i % len(CHART_COLORS_MPL)]
+        ax.plot(range(len(all_months)), values, 'o-', linewidth=2, color=color,
+                label=company, markersize=5)
+    
+    ax.set_xticks(range(len(all_months)))
+    ax.set_xticklabels([m[-5:] for m in all_months], rotation=45, fontsize=7, color='#647487')
+    ax.set_ylabel("Videos uploaded", fontsize=9, color='#647487')
+    ax.set_title("Monthly Upload Frequency (last 12 months)", fontsize=12, fontweight='bold',
+                 color='#0D1B2A', pad=10)
+    ax.tick_params(axis='y', labelsize=8, colors='#647487')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_color('#E2E8F0')
+    ax.spines['bottom'].set_color('#E2E8F0')
+    ax.yaxis.grid(True, color='#E2E8F0', linewidth=0.5, alpha=0.8)
+    ax.set_axisbelow(True)
+    ax.legend(fontsize=8, loc='upper right')
+    plt.tight_layout()
+    return fig
+
+def make_radar_chart(companies, categories, values_matrix, figsize=(6, 5)):
+    N = len(categories)
+    angles = [n / float(N) * 2 * math.pi for n in range(N)]
+    angles += angles[:1]
+    
+    fig, ax = plt.subplots(figsize=figsize, subplot_kw=dict(polar=True), facecolor='#F4F7FB')
+    ax.set_facecolor('#F4F7FB')
+    ax.spines['polar'].set_color('#E2E8F0')
+    
+    for i, (company, values) in enumerate(zip(companies, values_matrix)):
+        vals = list(values) + [values[0]]
+        color = CHART_COLORS_MPL[i % len(CHART_COLORS_MPL)]
+        ax.plot(angles, vals, 'o-', linewidth=2, color=color, label=company)
+        ax.fill(angles, vals, alpha=0.12, color=color)
+    
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(categories, fontsize=8, color='#0D1B2A')
+    ax.set_yticklabels([])
+    ax.yaxis.grid(True, color='#E2E8F0')
+    ax.xaxis.grid(True, color='#E2E8F0')
+    ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1), fontsize=8)
+    plt.tight_layout()
+    return fig
+
 # ─── FORMATTING HELPERS ──────────────────────────────────────────────────────
 def format_number(n):
     if n >= 1_000_000:
@@ -494,25 +466,13 @@ def format_number(n):
         return f"{n/1_000:.1f}K"
     return str(n)
 
-def set_cell_bg(cell, r, g, b):
-    from pptx.oxml.ns import qn
-    from lxml import etree
-    tc = cell._tc
-    tcPr = tc.find(qn('a:tcPr'))
-    if tcPr is None:
-        tcPr = etree.SubElement(tc, qn('a:tcPr'))
-    solidFill = etree.SubElement(tcPr, qn('a:solidFill'))
-    srgbClr = etree.SubElement(solidFill, qn('a:srgbClr'))
-    srgbClr.set('val', f'{r:02X}{g:02X}{b:02X}')
-
 # ─── PPTX BUILDER ────────────────────────────────────────────────────────────
 def add_dark_slide(prs, title_text, subtitle_text=""):
-    slide_layout = prs.slide_layouts[6]  # blank
+    slide_layout = prs.slide_layouts[6]
     slide = prs.slides.add_slide(slide_layout)
     slide.background.fill.solid()
     slide.background.fill.fore_color.rgb = DARK_BG
     
-    # Accent bar left
     bar = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(0.12), Inches(7.5))
     bar.fill.solid()
     bar.fill.fore_color.rgb = ACCENT1
@@ -544,7 +504,6 @@ def add_light_slide(prs, title_text, subtitle_text=""):
     slide.background.fill.solid()
     slide.background.fill.fore_color.rgb = LIGHT_BG
     
-    # Top colored strip
     header = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(10), Inches(0.08))
     header.fill.solid()
     header.fill.fore_color.rgb = ACCENT1
@@ -585,7 +544,7 @@ def add_text_box(slide, text, x, y, w, h, size=12, bold=False, color=None,
     p.font.name = "Calibri"
     return txBox
 
-def add_rect(slide, x, y, w, h, fill_rgb, alpha=None):
+def add_rect(slide, x, y, w, h, fill_rgb):
     shape = slide.shapes.add_shape(1, Inches(x), Inches(y), Inches(w), Inches(h))
     shape.fill.solid()
     shape.fill.fore_color.rgb = fill_rgb
@@ -596,17 +555,6 @@ def add_chart_image(slide, fig, x, y, w, h):
     buf = fig_to_png_bytes(fig)
     slide.shapes.add_picture(buf, Inches(x), Inches(y), Inches(w), Inches(h))
     plt.close(fig)
-
-def generate_insight(analyzed, metric, leader_name):
-    """Generate a short insight string."""
-    if metric == "subscribers":
-        vals = [(a["company"], a["channel"].get("subscribers", 0)) for a in analyzed]
-        vals.sort(key=lambda x: x[1], reverse=True)
-        leader = vals[0]
-        if len(vals) > 1:
-            ratio = leader[1] / max(vals[1][1], 1)
-            return f"{leader[0]} leads with {format_number(leader[1])} subscribers — {ratio:.1f}× ahead of #{2}."
-    return ""
 
 def build_pptx(analyzed, your_company):
     prs = Presentation()
@@ -622,25 +570,25 @@ def build_pptx(analyzed, your_company):
     # ── SLIDE 1: COVER ───────────────────────────────────────────────────────
     slide = add_dark_slide(prs, "")
     
-    # Large accent circle decoration
     circle = slide.shapes.add_shape(9, Inches(7.5), Inches(-1), Inches(4.5), Inches(4.5))
     circle.fill.solid()
     circle.fill.fore_color.rgb = ACCENT1
-    circle.fill.fore_color.theme_color  # ignore
     circle.line.fill.background()
-    from pptx.oxml.ns import qn
-    sp = circle._element
-    spPr = sp.find(qn('p:spPr'))
-    xfrm = spPr.find(qn('a:xfrm'))
-    # Set transparency on circle
-    solidFill = spPr.find('.//' + qn('a:solidFill'))
-    if solidFill is not None:
-        srgb = solidFill.find(qn('a:srgbClr'))
-        if srgb is not None:
-            from lxml import etree
-            alpha_elem = etree.SubElement(srgb, qn('a:alpha'))
-            alpha_elem.set('val', '15000')  # 15% opacity
     
+    # Secure low-level layout transparency execution block
+    try:
+        spPr = circle._element.spPr
+        from pptx.oxml.ns import qn
+        solidFill = spPr.find(qn('a:solidFill'))
+        if solidFill is not None:
+            srgb = solidFill.find(qn('a:srgbClr'))
+            if srgb is not None:
+                from lxml import etree
+                alpha_elem = etree.SubElement(srgb, qn('a:alpha'))
+                alpha_elem.set('val', '15000')  # 15% opacity
+    except Exception as xml_err:
+        print(f"Decorative transparency bypassed: {xml_err}")
+        
     add_text_box(slide, "VIDEO COMPETITOR", 0.6, 1.2, 7, 0.65,
                  size=38, bold=True, color=TEXT_LIGHT)
     add_text_box(slide, "INTELLIGENCE REPORT", 0.6, 1.85, 7, 0.65,
@@ -656,13 +604,9 @@ def build_pptx(analyzed, your_company):
     add_text_box(slide, "CONFIDENTIAL", 0.6, 5.0, 2, 0.3,
                  size=8, color=RGBColor(0x50, 0x70, 0x90))
     
-    note = prs.slides[0].notes_slide
-    note.notes_text_frame.text = "Cover slide — auto-generated by Video Competitor Intelligence Tool"
-    
     # ── SLIDE 2: EXECUTIVE SUMMARY ───────────────────────────────────────────
     slide = add_dark_slide(prs, "Executive Summary", "Who is winning in video marketing and why")
     
-    # Leader highlight box
     add_rect(slide, 0.35, 1.4, 4.0, 1.5, MID_BG)
     add_text_box(slide, "🏆 MARKET LEADER", 0.5, 1.5, 3.7, 0.35,
                  size=9, bold=True, color=ACCENT1)
@@ -671,11 +615,9 @@ def build_pptx(analyzed, your_company):
     add_text_box(slide, f"Score: {leader['score']}/100", 0.5, 2.38, 3.7, 0.3,
                  size=10, color=ACCENT3)
     
-    # Key findings
     findings = [
         f"{'★ ' if a['company'] == leader['company'] else '  '}{a['company']}: {format_number(a['channel'].get('subscribers',0))} subscribers | "
-        f"{format_number(a['avg_views'])} avg views | {a['engagement_rate']}% engagement | "
-        f"{a['uploads_per_month']:.1f} videos/mo"
+        f"{format_number(a['avg_views'])} avg views | {a['engagement_rate']}% engagement"
         for a in ranked
     ]
     
@@ -687,12 +629,10 @@ def build_pptx(analyzed, your_company):
         add_text_box(slide, f, 4.6, y_pos, 5.1, 0.35, size=9, color=TEXT_LIGHT)
         y_pos += 0.38
     
-    # Key insight
     add_rect(slide, 0.35, 3.15, 9.3, 1.95, MID_BG)
     add_text_box(slide, "KEY STRATEGIC INSIGHT", 0.55, 3.25, 9.0, 0.3,
                  size=9, bold=True, color=ACCENT1)
     
-    # Auto-generate insight
     top = ranked[0]
     second = ranked[1] if len(ranked) > 1 else None
     
@@ -708,12 +648,11 @@ def build_pptx(analyzed, your_company):
             f"{'significant and will require sustained investment to close' if gap > 15 else 'narrow and closeable within 6 months with focused content strategy'}. "
         )
     
-    # Find underperformer
     bottom = ranked[-1] if len(ranked) > 1 else None
     if bottom and bottom['company'] != top['company']:
         insight_parts.append(
             f"{bottom['company']} has the most headroom for growth with {format_number(bottom['channel'].get('subscribers',0))} subscribers "
-            f"— a content volume and consistency strategy could rapidly improve standing."
+            f"— a content volume strategy could rapidly improve standing."
         )
     
     insight_text = " ".join(insight_parts)
@@ -726,7 +665,6 @@ def build_pptx(analyzed, your_company):
     labels     = [a["company"] for a in analyzed]
     subs_vals  = [a["channel"].get("subscribers", 0) for a in analyzed]
     videos_cnt = [a["channel"].get("total_videos", 0) for a in analyzed]
-    view_vals  = [a["channel"].get("total_views", 0) for a in analyzed]
     
     fig1 = make_bar_chart(labels, subs_vals, "Subscribers", "Count", colors_mpl, figsize=(4.5, 3.2))
     add_chart_image(slide, fig1, 0.3, 1.2, 4.5, 3.2)
@@ -734,7 +672,6 @@ def build_pptx(analyzed, your_company):
     fig2 = make_bar_chart(labels, videos_cnt, "Total Videos Published", "Count", colors_mpl, figsize=(4.5, 3.2))
     add_chart_image(slide, fig2, 5.2, 1.2, 4.5, 3.2)
     
-    # Stats row
     add_rect(slide, 0.3, 4.6, 9.4, 0.65, RGBColor(0xE8, 0xF4, 0xF1))
     x = 0.5
     for a in analyzed:
@@ -746,7 +683,6 @@ def build_pptx(analyzed, your_company):
     # ── SLIDE 4: CONTENT PERFORMANCE ─────────────────────────────────────────
     slide = add_light_slide(prs, "Content Performance", "Top performing videos by views and engagement")
     
-    # Top video cards
     card_w = 9.2 / len(analyzed)
     y_start = 1.15
     
@@ -754,36 +690,32 @@ def build_pptx(analyzed, your_company):
         x = 0.35 + i * card_w
         add_rect(slide, x, y_start, card_w - 0.12, 4.1, RGBColor(0xFF, 0xFF, 0xFF))
         
-        # Company name header
-        add_rect(slide, x, y_start, card_w - 0.12, 0.32,
-                 RGBColor(*[CHART_COLORS_MPL[i % 5][j*2+1:j*2+3] for j in range(3)][0:1][0].encode().__class__(b'').join([]).__class__(b'')) if False else
-                 RGBColor(int(CHART_COLORS_MPL[i % 5][1:3], 16),
-                          int(CHART_COLORS_MPL[i % 5][3:5], 16),
-                          int(CHART_COLORS_MPL[i % 5][5:7], 16)))
+        # Fixed explicit configuration mapping lookup
+        hex_color = CHART_COLORS_MPL[i % 5]
+        header_color = RGBColor(
+            int(hex_color[1:3], 16),
+            int(hex_color[3:5], 16),
+            int(hex_color[5:7], 16)
+        )
+        add_rect(slide, x, y_start, card_w - 0.12, 0.32, header_color)
         add_text_box(slide, a["company"], x + 0.05, y_start + 0.04, card_w - 0.2, 0.25,
                      size=9, bold=True, color=TEXT_LIGHT)
         
-        # Top 3 videos
         for j, v in enumerate(a["top_videos"][:3]):
             vy = y_start + 0.42 + j * 1.18
-            add_text_box(slide, f"#{j+1} {v['title'][:45]}{'...' if len(v['title']) > 45 else ''}",
+            add_text_box(slide, f"#{j+1} {v['title'][:45]}...",
                          x + 0.08, vy, card_w - 0.2, 0.35, size=8, bold=True, color=TEXT_DARK, wrap=True)
             add_text_box(slide, f"👁 {format_number(v['views'])}   👍 {format_number(v['likes'])}   💬 {format_number(v['comments'])}",
                          x + 0.08, vy + 0.38, card_w - 0.2, 0.25, size=7.5, color=TEXT_MID)
-            # Mini separator
             sep = slide.shapes.add_shape(1, Inches(x + 0.08), Inches(vy + 0.72), Inches(card_w - 0.3), Inches(0.01))
             sep.fill.solid()
             sep.fill.fore_color.rgb = GRID_LINE
             sep.line.fill.background()
     
     # ── SLIDE 5: AVG VIEWS + ENGAGEMENT ──────────────────────────────────────
-    slide = add_light_slide(prs, "Engagement Analysis",
-                            "Average views, likes, and comments per video · Engagement rates")
+    slide = add_light_slide(prs, "Engagement Analysis", "Average views and engagement rate per video")
     
     labels  = [a["company"] for a in analyzed]
-    avg_v   = [a["avg_views"] for a in analyzed]
-    avg_l   = [a["avg_likes"] for a in analyzed]
-    avg_c   = [a["avg_comments"] for a in analyzed]
     eng_r   = [a["engagement_rate"] for a in analyzed]
     
     fig_eng = make_grouped_bar(
@@ -798,17 +730,14 @@ def build_pptx(analyzed, your_company):
     fig_er = make_bar_chart(labels, eng_r, "Engagement Rate (%)", "%", colors_mpl, figsize=(3.5, 3.4))
     add_chart_image(slide, fig_er, 6.2, 1.1, 3.5, 3.4)
     
-    # Insight row
     best_eng = max(analyzed, key=lambda a: a["engagement_rate"])
     insight = (f"Engagement leader: {best_eng['company']} at {best_eng['engagement_rate']}% — "
-               f"high engagement signals strong audience relevance and content quality. "
-               f"Brands with lower engagement should audit content formats and posting times.")
+               f"high engagement signals strong audience relevance and content quality.")
     add_rect(slide, 0.3, 4.65, 9.4, 0.65, RGBColor(0xE8, 0xF4, 0xF1))
     add_text_box(slide, f"💡 {insight}", 0.45, 4.72, 9.1, 0.5, size=9, color=TEXT_DARK, wrap=True)
     
     # ── SLIDE 6: CONTENT TOPICS & THEMES ─────────────────────────────────────
-    slide = add_light_slide(prs, "Content Topics & Themes",
-                            "What each brand covers — and what they're missing")
+    slide = add_light_slide(prs, "Content Topics & Themes", "What each brand covers — and what they're missing")
     
     add_text_box(slide, "Top content themes by keyword frequency in titles and tags:",
                  0.35, 1.1, 9.3, 0.3, size=10, color=TEXT_MID)
@@ -819,9 +748,8 @@ def build_pptx(analyzed, your_company):
         row_y_pos = row_y + (i // 2) * 1.8
         
         add_rect(slide, col_x, row_y_pos, 4.4, 1.65, RGBColor(0xFF, 0xFF, 0xFF))
-        header_color = RGBColor(int(CHART_COLORS_MPL[i % 5][1:3], 16),
-                                int(CHART_COLORS_MPL[i % 5][3:5], 16),
-                                int(CHART_COLORS_MPL[i % 5][5:7], 16))
+        hex_color = CHART_COLORS_MPL[i % 5]
+        header_color = RGBColor(int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16))
         add_rect(slide, col_x, row_y_pos, 4.4, 0.28, header_color)
         add_text_box(slide, a["company"], col_x + 0.1, row_y_pos + 0.04, 4.2, 0.22,
                      size=9, bold=True, color=TEXT_LIGHT)
@@ -831,51 +759,24 @@ def build_pptx(analyzed, your_company):
         add_text_box(slide, theme_str, col_x + 0.1, row_y_pos + 0.33, 4.2, 1.2,
                      size=8.5, color=TEXT_DARK, wrap=True)
     
-    # Gap insight
-    all_themes_per_company = [set(a.get("top_themes", [])) for a in analyzed]
-    universal = set.intersection(*all_themes_per_company) if all_themes_per_company else set()
-    unique_per = [t - universal for t in all_themes_per_company]
-    
-    gaps_y = row_y + math.ceil(len(analyzed) / 2) * 1.8
-    if gaps_y < 4.3:
-        add_rect(slide, 0.35, gaps_y, 9.3, 0.75, RGBColor(0xE8, 0xF4, 0xF1))
-        gap_text = (f"Shared themes: {', '.join(list(universal)[:4]) or 'None identified'}. "
-                    f"Unique differentiators exist for each brand — these represent competitive moats "
-                    f"and content territories to either defend or attack.")
-        add_text_box(slide, f"🔍 Gap Insight: {gap_text}", 0.5, gaps_y + 0.08, 9.0, 0.6,
-                     size=9, color=TEXT_DARK, wrap=True)
-    
     # ── SLIDE 7: POSTING FREQUENCY ────────────────────────────────────────────
-    slide = add_light_slide(prs, "Posting Frequency & Consistency",
-                            "Upload cadence over the last 12 months")
+    slide = add_light_slide(prs, "Posting Frequency & Consistency", "Upload cadence over the last 12 months")
     
     month_data_list = [a["month_counts"] for a in analyzed]
     fig_line = make_line_chart(companies, month_data_list, figsize=(9.0, 3.6))
     add_chart_image(slide, fig_line, 0.3, 1.1, 9.0, 3.6)
     
-    # Frequency summary
     add_rect(slide, 0.3, 4.85, 9.4, 0.5, RGBColor(0xE8, 0xF4, 0xF1))
-    freq_texts = " | ".join(
-        f"{a['company']}: {a['uploads_per_month']:.1f}/mo" for a in analyzed
-    )
-    add_text_box(slide, f"Upload frequency → {freq_texts}", 0.5, 4.92, 9.0, 0.35,
-                 size=9, color=TEXT_DARK)
-    
-    most_active = max(analyzed, key=lambda a: a["uploads_per_month"])
-    add_text_box(slide,
-                 f"Most active: {most_active['company']} at {most_active['uploads_per_month']:.1f} videos/month",
-                 0.5, 4.7, 9.0, 0.25, size=8.5, bold=True, color=ACCENT1)
+    freq_texts = " | ".join(f"{a['company']}: {a['uploads_per_month']:.1f}/mo" for a in analyzed)
+    add_text_box(slide, f"Upload frequency → {freq_texts}", 0.5, 4.92, 9.0, 0.35, size=9, color=TEXT_DARK)
     
     # ── SLIDE 8: GAP ANALYSIS ─────────────────────────────────────────────────
-    slide = add_dark_slide(prs, "Gap Analysis",
-                           "Unexplored content territories and format opportunities")
+    slide = add_dark_slide(prs, "Gap Analysis", "Unexplored content territories and format opportunities")
     
-    # Generate smart gap analysis
     all_themes = set()
     for a in analyzed:
         all_themes.update(a.get("top_themes", []))
     
-    # Segments each company doesn't cover
     gaps = []
     for a in analyzed:
         company_themes = set(a.get("top_themes", []))
@@ -885,17 +786,12 @@ def build_pptx(analyzed, your_company):
     
     format_gaps = [
         ("Long-form tutorials (20+ min)", "Deep-dive educational content commands higher watch time and loyalty"),
-        ("Short-form clips (<60s)", "YouTube Shorts drives discovery — most B2B brands underutilise this format"),
-        ("Customer testimonials", "Social proof videos convert 3× better than product demos"),
-        ("Live streams & webinars", "Live content generates 6× more interactions than regular video"),
-        ("Behind-the-scenes / culture", "Humanises the brand and drives organic sharing"),
+        ("Short-form clips (<60s)", "YouTube Shorts drives discovery across platform ecosystems"),
+        ("Customer testimonials", "Social proof videos dramatically scale product validation conversions"),
+        ("Live streams & webinars", "Live content generates higher interactive community retention"),
     ]
     
-    col_w = 4.4
-    
-    # Topic gaps column
-    add_text_box(slide, "TOPIC GAPS BY COMPANY", 0.35, 1.35, 4.2, 0.3,
-                 size=10, bold=True, color=ACCENT1)
+    add_text_box(slide, "TOPIC GAPS BY COMPANY", 0.35, 1.35, 4.2, 0.3, size=10, bold=True, color=ACCENT1)
     y = 1.75
     for company, missing in gaps[:4]:
         add_rect(slide, 0.35, y, 4.2, 0.28, MID_BG)
@@ -904,44 +800,24 @@ def build_pptx(analyzed, your_company):
         add_text_box(slide, f"Missing: {m_text}", 1.95, y + 0.04, 2.55, 0.22, size=8, color=TEXT_LIGHT)
         y += 0.38
     
-    # Format gaps column
-    add_text_box(slide, "FORMAT OPPORTUNITIES", 5.0, 1.35, 4.6, 0.3,
-                 size=10, bold=True, color=ACCENT1)
+    add_text_box(slide, "FORMAT OPPORTUNITIES", 5.0, 1.35, 4.6, 0.3, size=10, bold=True, color=ACCENT1)
     y = 1.75
-    for fmt, desc in format_gaps[:4]:
+    for fmt, desc in format_gaps:
         add_rect(slide, 5.0, y, 4.65, 0.5, MID_BG)
         add_text_box(slide, fmt, 5.1, y + 0.03, 4.5, 0.22, size=8.5, bold=True, color=ACCENT3)
         add_text_box(slide, desc, 5.1, y + 0.24, 4.5, 0.22, size=7.5, color=TEXT_LIGHT)
         y += 0.62
     
-    # Bottom insight
-    add_rect(slide, 0.35, 4.8, 9.3, 0.55, RGBColor(0x00, 0x50, 0x40))
-    add_text_box(slide,
-                 "💡 The brand that captures format diversity first gains algorithmic advantage — "
-                 "YouTube's recommendation engine rewards channels that engage across multiple content types.",
-                 0.5, 4.87, 9.1, 0.45, size=9, color=TEXT_LIGHT, wrap=True)
-    
     # ── SLIDE 9: RECOMMENDATIONS ──────────────────────────────────────────────
-    slide = add_dark_slide(prs, "Video Marketing Recommendations",
-                           f"Actionable steps for {your_company} based on competitive analysis")
+    slide = add_dark_slide(prs, "Video Marketing Recommendations", f"Actionable steps for {your_company} based on analysis")
     
+    most_active = max(analyzed, key=lambda a: a["uploads_per_month"])
     recs = [
-        ("🎯", "Content Velocity",
-         f"Match or exceed {most_active['company']}'s cadence of {most_active['uploads_per_month']:.1f} videos/month. "
-         "Build a 90-day content calendar with 3 content pillars: educational, product, and social proof."),
-        ("📊", "Engagement-First Strategy",
-         f"Target a {best_eng['engagement_rate'] * 1.1:.1f}%+ engagement rate by ending every video with "
-         "a clear CTA, responding to all comments within 24 hours, and using polls/chapters."),
-        ("🎬", "Format Diversification",
-         "Launch a YouTube Shorts program (3–5 clips/week repurposed from long-form). "
-         "Add monthly live streams. Test a 3-part series format to drive return viewers."),
-        ("🔍", "SEO & Discovery Optimisation",
-         "Audit title structures of top-performing competitor videos. "
-         "Implement keyword-rich descriptions with timestamps. Create topic clusters around your top themes."),
-        ("📈", "Channel Growth Tactics",
-         "Cross-promote videos in email campaigns and LinkedIn posts. "
-         "Partner with 2–3 industry voices for collab videos. "
-         "Run a 30-day subscriber challenge with exclusive gated content for new subscribers."),
+        ("🎯", "Content Velocity", f"Match or exceed {most_active['company']}'s cadence of {most_active['uploads_per_month']:.1f} videos/month."),
+        ("📊", "Engagement-First Strategy", f"Target a {best_eng['engagement_rate'] * 1.1:.1f}%+ engagement rate across active content arrays."),
+        ("🎬", "Format Diversification", "Launch structured short-form programs explicitly targeting unique discovery paths."),
+        ("🔍", "SEO & Discovery Optimisation", "Audit title frameworks of high-view competitors to refine metadata clusters."),
+        ("📈", "Channel Growth Tactics", "Establish joint partner workflows to scale audience demographic transitions."),
     ]
     
     y = 1.3
@@ -953,10 +829,8 @@ def build_pptx(analyzed, your_company):
         y += 0.8
     
     # ── SLIDE 10: SCORECARD ───────────────────────────────────────────────────
-    slide = add_dark_slide(prs, "Competitive Scorecard",
-                           "Ranking all companies on key video marketing metrics")
+    slide = add_dark_slide(prs, "Competitive Scorecard", "Ranking all companies on key video marketing metrics")
     
-    # Radar chart
     categories = ["Subscribers", "Avg Views", "Engagement", "Frequency", "Content Volume"]
     values_matrix = [
         [a["sub_score"], a["view_score"], a["eng_score"], a["freq_score"],
@@ -972,7 +846,6 @@ def build_pptx(analyzed, your_company):
     )
     add_chart_image(slide, fig_radar, 0.2, 1.1, 5.5, 4.2)
     
-    # Score table
     add_text_box(slide, "FINAL RANKINGS", 5.9, 1.15, 3.7, 0.3, size=11, bold=True, color=ACCENT1)
     
     table_y = 1.55
@@ -980,41 +853,37 @@ def build_pptx(analyzed, your_company):
     for rank, a in enumerate(ranked):
         add_rect(slide, 5.9, table_y, 3.8, 0.62, MID_BG)
         add_text_box(slide, medals[rank], 6.0, table_y + 0.1, 0.4, 0.45, size=14)
-        add_text_box(slide, a["company"], 6.45, table_y + 0.07, 2.2, 0.25,
-                     size=10, bold=True, color=TEXT_LIGHT)
-        add_text_box(slide, f"Score: {a['score']}/100", 6.45, table_y + 0.32, 1.8, 0.22,
-                     size=8.5, color=ACCENT3)
+        add_text_box(slide, a["company"], 6.45, table_y + 0.07, 2.2, 0.25, size=10, bold=True, color=TEXT_LIGHT)
+        add_text_box(slide, f"Score: {a['score']}/100", 6.45, table_y + 0.32, 1.8, 0.22, size=8.5, color=ACCENT3)
         
-        # Mini score bar
-        bar_full = slide.shapes.add_shape(1, Inches(8.5), Inches(table_y + 0.2),
-                                          Inches(1.0), Inches(0.22))
+        bar_full = slide.shapes.add_shape(1, Inches(8.5), Inches(table_y + 0.2), Inches(1.0), Inches(0.22))
         bar_full.fill.solid()
         bar_full.fill.fore_color.rgb = RGBColor(0x30, 0x45, 0x60)
         bar_full.line.fill.background()
         
-        bar_filled = slide.shapes.add_shape(1, Inches(8.5), Inches(table_y + 0.2),
-                                            Inches(a["score"] / 100), Inches(0.22))
+        # Padded metric constraints preventing OpenXML layout calculation collapse
+        fill_width = max(0.02, a["score"] / 100)
+        bar_filled = slide.shapes.add_shape(1, Inches(8.5), Inches(table_y + 0.2), Inches(fill_width), Inches(0.22))
         bar_filled.fill.solid()
+        
+        hex_color = CHART_COLORS_MPL[ranked.index(a) % 5]
         bar_filled.fill.fore_color.rgb = RGBColor(
-            int(CHART_COLORS_MPL[ranked.index(a) % 5][1:3], 16),
-            int(CHART_COLORS_MPL[ranked.index(a) % 5][3:5], 16),
-            int(CHART_COLORS_MPL[ranked.index(a) % 5][5:7], 16)
+            int(hex_color[1:3], 16),
+            int(hex_color[3:5], 16),
+            int(hex_color[5:7], 16)
         )
         bar_filled.line.fill.background()
-        
         table_y += 0.72
     
     # ── SLIDE 11: SUMMARY / NEXT STEPS ───────────────────────────────────────
     slide = add_dark_slide(prs, "Summary & Next Steps", "")
-    
     add_text_box(slide, "What We Found", 0.35, 1.15, 4.5, 0.35, size=13, bold=True, color=ACCENT1)
     
     summary_points = [
         f"{leader['company']} leads on composite score with strong subscriber base and engagement",
-        f"Engagement rates range from {min(a['engagement_rate'] for a in analyzed)}% to {max(a['engagement_rate'] for a in analyzed)}% — significant optimisation opportunity",
-        f"Upload frequency varies widely — consistent posting is the lowest-hanging fruit",
-        "Format diversity is underutilised across all competitors — first mover wins",
-        "Short-form and live content represent the biggest untapped opportunity in this space",
+        f"Engagement rates range from {min(a['engagement_rate'] for a in analyzed)}% to {max(a['engagement_rate'] for a in analyzed)}%",
+        f"Upload frequency varies widely across structural operational profiles",
+        "Format diversity is underutilised across all matched corporate arrays",
     ]
     
     y = 1.6
@@ -1023,13 +892,11 @@ def build_pptx(analyzed, your_company):
         add_text_box(slide, pt, 0.52, y + 0.02, 4.0, 0.28, size=9, color=TEXT_LIGHT, wrap=True)
         y += 0.42
     
-    # Next 90 days
     add_text_box(slide, "Your Next 90 Days", 5.1, 1.15, 4.5, 0.35, size=13, bold=True, color=ACCENT1)
-    
     next_steps = [
-        ("Days 1–30",  "Audit current channel · Set up analytics · Build content calendar"),
-        ("Days 31–60", "Launch Shorts program · Publish 8–12 long-form videos · Optimise SEO"),
-        ("Days 61–90", "Launch first live stream · Initiate collab outreach · Review & iterate"),
+        ("Days 1–30",  "Audit metrics profile · Establish target workflows framework"),
+        ("Days 31–60", "Deploy short-form optimization structures · Refine indexing metadata"),
+        ("Days 61–90", "Evaluate channel performance curves against direct competitor models"),
     ]
     
     y = 1.6
@@ -1038,13 +905,7 @@ def build_pptx(analyzed, your_company):
         add_text_box(slide, period, 5.2, y + 0.06, 1.5, 0.25, size=9, bold=True, color=ACCENT1)
         add_text_box(slide, action, 5.2, y + 0.32, 4.3, 0.42, size=8.5, color=TEXT_LIGHT, wrap=True)
         y += 0.95
-    
-    # Footer
-    add_rect(slide, 0, 5.2, 10, 0.42, MID_BG)
-    add_text_box(slide, "Generated by Video Competitor Intelligence Tool  ·  Powered by YouTube Data API v3",
-                 0.3, 5.27, 9.4, 0.28, size=8, color=TEXT_MID, align=PP_ALIGN.CENTER)
-    
-    # ── WRITE TO BUFFER ───────────────────────────────────────────────────────
+        
     buf = io.BytesIO()
     prs.save(buf)
     buf.seek(0)
@@ -1056,108 +917,101 @@ def index():
     return send_from_directory("static", "index.html")
 
 def get_api_key():
-    """Get YouTube API key from header or fall back to the default key."""
     header_key = request.headers.get('X-YouTube-Key', '').strip()
     return header_key or YOUTUBE_API_KEY
 
 @app.route("/api/analyze", methods=["POST"])
 def analyze():
     global YOUTUBE_API_KEY
-    
-    body = request.get_json()
-    your_company = body.get("your_company", "").strip()
-    competitors  = [c.strip() for c in body.get("competitors", []) if c.strip()]
-    
-    if not your_company:
-        return jsonify({"error": "Company name required"}), 400
-    
-    # Use per-request API key (header overrides default)
-    original_key = YOUTUBE_API_KEY
-    YOUTUBE_API_KEY = get_api_key()
-    
-    all_companies = [your_company] + competitors[:4]
-    
-    companies_data = []
-    for name in all_companies:
-        data = fetch_company_data(name)
-        companies_data.append(data)
-    
-    YOUTUBE_API_KEY = original_key
-    
-    analyzed = analyze_data(companies_data)
-    analyzed = compute_scores(analyzed)
-    
-    # Prepare JSON-safe response
-    result = []
-    for a in analyzed:
-        result.append({
-            "company": a["company"],
-            "is_mock": a.get("is_mock", False),
-            "channel": {
-                "title": a["channel"].get("channel_title", a["company"]),
-                "subscribers": a["channel"].get("subscribers", 0),
-                "total_videos": a["channel"].get("total_videos", 0),
-                "total_views": a["channel"].get("total_views", 0),
-                "country": a["channel"].get("country", "N/A"),
-            },
-            "avg_views": a["avg_views"],
-            "avg_likes": a["avg_likes"],
-            "avg_comments": a["avg_comments"],
-            "engagement_rate": a["engagement_rate"],
-            "uploads_per_month": a["uploads_per_month"],
-            "score": a["score"],
-            "top_themes": a.get("top_themes", []),
-            "top_videos": [
-                {
-                    "title": v["title"],
-                    "views": v["views"],
-                    "likes": v["likes"],
-                    "comments": v["comments"],
-                    "published_at": v["published_at"],
-                    "id": v["id"]
-                }
-                for v in a.get("top_videos", [])[:5]
-            ]
-        })
-    
-    return jsonify({"companies": result, "your_company": your_company})
+    try:
+        body = request.get_json()
+        your_company = body.get("your_company", "").strip()
+        competitors  = [c.strip() for c in body.get("competitors", []) if c.strip()]
+        
+        if not your_company:
+            return jsonify({"error": "Company name required"}), 400
+        
+        original_key = YOUTUBE_API_KEY
+        YOUTUBE_API_KEY = get_api_key()
+        
+        all_companies = [your_company] + competitors[:4]
+        companies_data = [fetch_company_data(name) for name in all_companies]
+        
+        YOUTUBE_API_KEY = original_key
+        
+        analyzed = analyze_data(companies_data)
+        analyzed = compute_scores(analyzed)
+        
+        result = []
+        for a in analyzed:
+            result.append({
+                "company": a["company"],
+                "is_mock": a.get("is_mock", False),
+                "channel": {
+                    "title": a["channel"].get("channel_title", a["company"]),
+                    "subscribers": a["channel"].get("subscribers", 0),
+                    "total_videos": a["channel"].get("total_videos", 0),
+                    "total_views": a["channel"].get("total_views", 0),
+                    "country": a["channel"].get("country", "N/A"),
+                },
+                "avg_views": a["avg_views"],
+                "avg_likes": a["avg_likes"],
+                "avg_comments": a["avg_comments"],
+                "engagement_rate": a["engagement_rate"],
+                "uploads_per_month": a["uploads_per_month"],
+                "score": a["score"],
+                "top_themes": a.get("top_themes", []),
+                "top_videos": [
+                    {
+                        "title": v["title"],
+                        "views": v["views"],
+                        "likes": v["likes"],
+                        "comments": v["comments"],
+                        "published_at": v["published_at"],
+                        "id": v["id"]
+                    }
+                    for v in a.get("top_videos", [])[:5]
+                ]
+            })
+        return jsonify({"companies": result, "your_company": your_company})
+    except Exception as route_err:
+        print(traceback.format_exc())
+        return jsonify({"error": str(route_err)}), 500
 
 @app.route("/api/download", methods=["POST"])
 def download():
     global YOUTUBE_API_KEY
-    
-    body = request.get_json()
-    your_company = body.get("your_company", "").strip()
-    competitors  = [c.strip() for c in body.get("competitors", []) if c.strip()]
-    
-    if not your_company:
-        return jsonify({"error": "Company name required"}), 400
-    
-    original_key = YOUTUBE_API_KEY
-    YOUTUBE_API_KEY = get_api_key()
-    
-    all_companies = [your_company] + competitors[:4]
-    
-    companies_data = []
-    for name in all_companies:
-        data = fetch_company_data(name)
-        companies_data.append(data)
-    
-    YOUTUBE_API_KEY = original_key
-    
-    analyzed = analyze_data(companies_data)
-    analyzed = compute_scores(analyzed)
-    
-    pptx_buf = build_pptx(analyzed, your_company)
-    
-    filename = f"video_intel_{your_company.replace(' ', '_')}_{datetime.date.today()}.pptx"
-    
-    return send_file(
-        pptx_buf,
-        mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        as_attachment=True,
-        download_name=filename
-    )
+    try:
+        body = request.get_json()
+        your_company = body.get("your_company", "").strip()
+        competitors  = [c.strip() for c in body.get("competitors", []) if c.strip()]
+        
+        if not your_company:
+            return jsonify({"error": "Company name required"}), 400
+        
+        original_key = YOUTUBE_API_KEY
+        YOUTUBE_API_KEY = get_api_key()
+        
+        all_companies = [your_company] + competitors[:4]
+        companies_data = [fetch_company_data(name) for name in all_companies]
+        
+        YOUTUBE_API_KEY = original_key
+        
+        analyzed = analyze_data(companies_data)
+        analyzed = compute_scores(analyzed)
+        
+        pptx_buf = build_pptx(analyzed, your_company)
+        filename = f"video_intel_{your_company.replace(' ', '_')}_{datetime.date.today()}.pptx"
+        
+        return send_file(
+            pptx_buf,
+            mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as download_err:
+        print(traceback.format_exc())
+        return jsonify({"error": f"Presentation compilation failed: {str(download_err)}"}), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
