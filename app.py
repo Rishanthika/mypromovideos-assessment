@@ -23,7 +23,7 @@ import numpy as np
 
 app = Flask(__name__)
 
-YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
+YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "AIzaSyC5rQoIscl-rBWSDyFXXP03rRaOEnFs-M8")
 
 # ─── COLOR PALETTE ───────────────────────────────────────────────────────────
 DARK_BG    = RGBColor(0x0D, 0x1B, 0x2A)  # deep navy
@@ -1056,7 +1056,7 @@ def index():
     return send_from_directory("static", "index.html")
 
 def get_api_key():
-    """Get YouTube API key from header or environment."""
+    """Get YouTube API key from header or fall back to the default key."""
     header_key = request.headers.get('X-YouTube-Key', '').strip()
     return header_key or YOUTUBE_API_KEY
 
@@ -1071,7 +1071,7 @@ def analyze():
     if not your_company:
         return jsonify({"error": "Company name required"}), 400
     
-    # Use per-request API key
+    # Use per-request API key (header overrides default)
     original_key = YOUTUBE_API_KEY
     YOUTUBE_API_KEY = get_api_key()
     
