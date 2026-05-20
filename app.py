@@ -2,22 +2,20 @@ import os
 import json
 import io
 import re
-import time
 import math
 import datetime
 import requests
 import traceback
-from flask import Flask, request, jsonify, send_file, render_template, send_from_directory
+from flask import Flask, request, jsonify, send_file, send_from_directory
 from pptx import Presentation
-from pptx.util import Inches, Pt, Emu
+from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 from pptx.chart.data import ChartData
 from pptx.enum.chart import XL_CHART_TYPE
 import matplotlib
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
+from matplotlib.figure import Figure
 import numpy as np
 
 app = Flask(__name__)
@@ -36,8 +34,6 @@ TEXT_LIGHT = RGBColor(0xFF, 0xFF, 0xFF)
 TEXT_MID   = RGBColor(0x64, 0x74, 0x87)
 GRID_LINE  = RGBColor(0xE2, 0xE8, 0xF0)
 
-CHART_COLORS_HEX = ["00C2A0", "FF6B35", "2563EB", "9333EA", "F59E0B"]
-
 def rgb_to_hex(r, g, b):
     return f"#{r:02x}{g:02x}{b:02x}"
 
@@ -51,7 +47,6 @@ CHART_COLORS_MPL = [
 
 # ─── YOUTUBE API ─────────────────────────────────────────────────────────────
 def search_channel(company_name):
-    """Search for a YouTube channel by company name."""
     if not YOUTUBE_API_KEY:
         return None
     try:
@@ -78,7 +73,6 @@ def search_channel(company_name):
         return None
 
 def get_channel_stats(channel_id):
-    """Get channel statistics."""
     if not YOUTUBE_API_KEY:
         return {}
     try:
@@ -113,7 +107,6 @@ def get_channel_stats(channel_id):
         return {}
 
 def get_recent_videos(uploads_playlist_id, max_results=50):
-    """Get recent videos from uploads playlist."""
     if not YOUTUBE_API_KEY or not uploads_playlist_id:
         return []
     try:
@@ -134,7 +127,6 @@ def get_recent_videos(uploads_playlist_id, max_results=50):
         return []
 
 def get_video_stats(video_ids):
-    """Get statistics for a list of video IDs."""
     if not YOUTUBE_API_KEY or not video_ids:
         return []
     videos = []
@@ -170,7 +162,6 @@ def get_video_stats(video_ids):
     return videos
 
 def fetch_company_data(company_name):
-    """Fetch all YouTube data for a company."""
     channel_id = search_channel(company_name)
     if not channel_id:
         return generate_mock_data(company_name)
@@ -190,7 +181,6 @@ def fetch_company_data(company_name):
     }
 
 def generate_mock_data(company_name):
-    """Generate realistic mathematically proportional mock data when API is unavailable."""
     import random
     rng = random.Random(hash(company_name) % 10000)
     
@@ -209,7 +199,6 @@ def generate_mock_data(company_name):
         views = int(rng.gauss(base_views / num_videos, base_views / (num_videos * 3)))
         views = max(100, views)
         
-        # Tie engagement metrics proportionally to views
         likes = int(views * rng.uniform(0.02, 0.04))
         comments = int(likes * rng.uniform(0.05, 0.10))
         
@@ -245,7 +234,6 @@ def generate_mock_data(company_name):
 
 # ─── ANALYSIS ────────────────────────────────────────────────────────────────
 def analyze_data(companies_data):
-    """Compute derived analytics for all companies."""
     results = []
     for data in companies_data:
         videos = data["videos"]
@@ -316,7 +304,6 @@ def analyze_data(companies_data):
     return results
 
 def compute_scores(analyzed):
-    """Score each company 0-100 on key metrics."""
     def safe_max(lst):
         return max(lst) if lst else 1
     
@@ -343,7 +330,7 @@ def compute_scores(analyzed):
     
     return sorted(analyzed, key=lambda a: a["score"], reverse=True)
 
-# ─── CHART GENERATORS ────────────────────────────────────────────────────────
+# ─── THREAD-SAFE CHART GENERATORS ────────────────────────────────────────────
 def fig_to_png_bytes(fig):
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=150, bbox_inches='tight',
@@ -352,7 +339,8 @@ def fig_to_png_bytes(fig):
     return buf
 
 def make_bar_chart(labels, values, title, ylabel, colors=None, figsize=(8, 4)):
-    fig, ax = plt.subplots(figsize=figsize, facecolor='#F4F7FB')
+    fig = Figure(figsize=figsize, facecolor='#F4F7FB')
+    ax = fig.add_subplot(111)
     ax.set_facecolor('#F4F7FB')
     if colors is None:
         colors = CHART_COLORS_MPL[:len(labels)]
@@ -371,7 +359,7 @@ def make_bar_chart(labels, values, title, ylabel, colors=None, figsize=(8, 4)):
         ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() * 1.01,
                 format_number(val), ha='center', va='bottom', fontsize=7.5,
                 color='#0D1B2A', fontweight='bold')
-    plt.tight_layout()
+    fig.tight_layout()
     return fig
 
 def make_grouped_bar(companies, metric_labels, values_matrix, title, figsize=(9, 4)):
@@ -379,7 +367,8 @@ def make_grouped_bar(companies, metric_labels, values_matrix, title, figsize=(9,
     n = len(companies)
     width = 0.7 / max(n, 1)
     
-    fig, ax = plt.subplots(figsize=figsize, facecolor='#F4F7FB')
+    fig = Figure(figsize=figsize, facecolor='#F4F7FB')
+    ax = fig.add_subplot(111)
     ax.set_facecolor('#F4F7FB')
     
     for i, (company, values) in enumerate(zip(companies, values_matrix)):
@@ -399,11 +388,12 @@ def make_grouped_bar(companies, metric_labels, values_matrix, title, figsize=(9,
     ax.yaxis.grid(True, color='#E2E8F0', linewidth=0.5, alpha=0.8)
     ax.set_axisbelow(True)
     ax.legend(fontsize=8, loc='upper right')
-    plt.tight_layout()
+    fig.tight_layout()
     return fig
 
 def make_line_chart(companies, month_data_list, figsize=(9, 4)):
-    fig, ax = plt.subplots(figsize=figsize, facecolor='#F4F7FB')
+    fig = Figure(figsize=figsize, facecolor='#F4F7FB')
+    ax = fig.add_subplot(111)
     ax.set_facecolor('#F4F7FB')
     
     all_months = sorted(set(m for md in month_data_list for m in md.keys()))
@@ -431,7 +421,7 @@ def make_line_chart(companies, month_data_list, figsize=(9, 4)):
     ax.yaxis.grid(True, color='#E2E8F0', linewidth=0.5, alpha=0.8)
     ax.set_axisbelow(True)
     ax.legend(fontsize=8, loc='upper right')
-    plt.tight_layout()
+    fig.tight_layout()
     return fig
 
 def make_radar_chart(companies, categories, values_matrix, figsize=(6, 5)):
@@ -439,7 +429,8 @@ def make_radar_chart(companies, categories, values_matrix, figsize=(6, 5)):
     angles = [n / float(N) * 2 * math.pi for n in range(N)]
     angles += angles[:1]
     
-    fig, ax = plt.subplots(figsize=figsize, subplot_kw=dict(polar=True), facecolor='#F4F7FB')
+    fig = Figure(figsize=figsize, facecolor='#F4F7FB')
+    ax = fig.add_subplot(111, polar=True)
     ax.set_facecolor('#F4F7FB')
     ax.spines['polar'].set_color('#E2E8F0')
     
@@ -455,7 +446,7 @@ def make_radar_chart(companies, categories, values_matrix, figsize=(6, 5)):
     ax.yaxis.grid(True, color='#E2E8F0')
     ax.xaxis.grid(True, color='#E2E8F0')
     ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1), fontsize=8)
-    plt.tight_layout()
+    fig.tight_layout()
     return fig
 
 # ─── FORMATTING HELPERS ──────────────────────────────────────────────────────
@@ -554,7 +545,6 @@ def add_rect(slide, x, y, w, h, fill_rgb):
 def add_chart_image(slide, fig, x, y, w, h):
     buf = fig_to_png_bytes(fig)
     slide.shapes.add_picture(buf, Inches(x), Inches(y), Inches(w), Inches(h))
-    plt.close(fig)
 
 def build_pptx(analyzed, your_company):
     prs = Presentation()
@@ -574,19 +564,6 @@ def build_pptx(analyzed, your_company):
     circle.fill.solid()
     circle.fill.fore_color.rgb = ACCENT1
     circle.line.fill.background()
-    
-    try:
-        spPr = circle._element.spPr
-        from pptx.oxml.ns import qn
-        solidFill = spPr.find(qn('a:solidFill'))
-        if solidFill is not None:
-            srgb = solidFill.find(qn('a:srgbClr'))
-            if srgb is not None:
-                from lxml import etree
-                alpha_elem = etree.SubElement(srgb, qn('a:alpha'))
-                alpha_elem.set('val', '15000')  # 15% opacity
-    except Exception as xml_err:
-        print(f"Decorative transparency bypassed: {xml_err}")
         
     add_text_box(slide, "VIDEO COMPETITOR", 0.6, 1.2, 7, 0.65,
                  size=38, bold=True, color=TEXT_LIGHT)
@@ -686,10 +663,11 @@ def build_pptx(analyzed, your_company):
     y_start = 1.15
     
     for i, a in enumerate(analyzed):
+        orig_index = analyzed.index(a)
         x = 0.35 + i * card_w
         add_rect(slide, x, y_start, card_w - 0.12, 4.1, RGBColor(0xFF, 0xFF, 0xFF))
         
-        hex_color = CHART_COLORS_MPL[i % 5]
+        hex_color = CHART_COLORS_MPL[orig_index % 5]
         header_color = RGBColor(
             int(hex_color[1:3], 16),
             int(hex_color[3:5], 16),
@@ -699,7 +677,7 @@ def build_pptx(analyzed, your_company):
         add_text_box(slide, a["company"], x + 0.05, y_start + 0.04, card_w - 0.2, 0.25,
                      size=9, bold=True, color=TEXT_LIGHT)
         
-        for j, v in enumerate(a["top_videos"][:3]):
+        for j, v in enumerate(a.get("top_videos", [])[:3]):
             vy = y_start + 0.42 + j * 1.18
             add_text_box(slide, f"#{j+1} {v['title'][:45]}...",
                          x + 0.08, vy, card_w - 0.2, 0.35, size=8, bold=True, color=TEXT_DARK, wrap=True)
@@ -742,11 +720,12 @@ def build_pptx(analyzed, your_company):
     
     row_y = 1.55
     for i, a in enumerate(analyzed):
+        orig_index = analyzed.index(a)
         col_x = 0.35 + (i % 2) * 4.7
         row_y_pos = row_y + (i // 2) * 1.8
         
         add_rect(slide, col_x, row_y_pos, 4.4, 1.65, RGBColor(0xFF, 0xFF, 0xFF))
-        hex_color = CHART_COLORS_MPL[i % 5]
+        hex_color = CHART_COLORS_MPL[orig_index % 5]
         header_color = RGBColor(int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16))
         add_rect(slide, col_x, row_y_pos, 4.4, 0.28, header_color)
         add_text_box(slide, a["company"], col_x + 0.1, row_y_pos + 0.04, 4.2, 0.22,
@@ -849,6 +828,7 @@ def build_pptx(analyzed, your_company):
     table_y = 1.55
     medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
     for rank, a in enumerate(ranked):
+        orig_index = analyzed.index(a)
         add_rect(slide, 5.9, table_y, 3.8, 0.62, MID_BG)
         add_text_box(slide, medals[rank], 6.0, table_y + 0.1, 0.4, 0.45, size=14)
         add_text_box(slide, a["company"], 6.45, table_y + 0.07, 2.2, 0.25, size=10, bold=True, color=TEXT_LIGHT)
@@ -863,7 +843,7 @@ def build_pptx(analyzed, your_company):
         bar_filled = slide.shapes.add_shape(1, Inches(8.5), Inches(table_y + 0.2), Inches(fill_width), Inches(0.22))
         bar_filled.fill.solid()
         
-        hex_color = CHART_COLORS_MPL[ranked.index(a) % 5]
+        hex_color = CHART_COLORS_MPL[orig_index % 5]
         bar_filled.fill.fore_color.rgb = RGBColor(
             int(hex_color[1:3], 16),
             int(hex_color[3:5], 16),
@@ -998,14 +978,29 @@ def download():
         analyzed = compute_scores(analyzed)
         
         pptx_buf = build_pptx(analyzed, your_company)
-        filename = f"video_intel_{your_company.replace(' ', '_')}_{datetime.date.today()}.pptx"
         
-        return send_file(
-            pptx_buf,
-            mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            as_attachment=True,
-            download_name=filename
-        )
+        # Safe filename generation to prevent OS write errors
+        safe_company = re.sub(r'[^A-Za-z0-9_]', '', your_company.replace(' ', '_'))
+        filename = f"video_intel_{safe_company}_{datetime.date.today()}.pptx"
+        
+        # Robust send_file block that handles multiple versions of Flask
+        try:
+            return send_file(
+                pptx_buf,
+                mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                as_attachment=True,
+                download_name=filename
+            )
+        except TypeError:
+            # Fallback if Render uses an older Flask build
+            pptx_buf.seek(0)
+            return send_file(
+                pptx_buf,
+                mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                as_attachment=True,
+                attachment_filename=filename
+            )
+            
     except Exception as download_err:
         print(traceback.format_exc())
         return jsonify({"error": f"Presentation compilation failed: {str(download_err)}"}), 500
